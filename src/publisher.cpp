@@ -92,14 +92,32 @@ Publisher::~Publisher()
   RTC_LOG(INFO) <<__FUNCTION__<<" <<<";
 	pc_->Close();
 
+  RTC_LOG(INFO) <<__FUNCTION__<<" free pc_";
+	if(signal_thread_) {
+		if(signal_thread_->IsCurrent()) {
+			pc_ = nullptr;
+		} else {
+      signal_thread_->Invoke<void>(RTC_FROM_HERE, [this] {
+				this->pc_ = nullptr;
+      });
+		}
+    RTC_DCHECK(! signal_thread_->IsCurrent());
+  } else {
+    pc_ = nullptr;
+	}
+
   RTC_LOG(INFO) <<__FUNCTION__<<" free factory_";
-	factory_ = nullptr;
+  factory_ = nullptr;
 
   RTC_LOG(INFO) <<__FUNCTION__<<" stop signal_thread_";
-	if(signal_thread_) {
+  if(signal_thread_) {
     signal_thread_->Quit();
-		delete signal_thread_;
-	}
+  }
+
+  RTC_LOG(INFO) <<__FUNCTION__<<" free signal_thread_";
+  if(signal_thread_) {
+    delete signal_thread_;
+  }
 
   RTC_LOG(INFO) <<__FUNCTION__<<" >>>";
 }
@@ -198,7 +216,6 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Publisher::get_factor
     if (!signal_thread_->Start()) {
       RTC_LOG(INFO) <<__FUNCTION__<<" thread start errored";
     }
-
 	}
   webrtc::PeerConnectionInterface::RTCConfiguration config;
 
@@ -241,7 +258,11 @@ rtc::scoped_refptr<webrtc::AudioTrackInterface> Publisher::create_audio_track()
 
 rtc::scoped_refptr<webrtc::VideoTrackInterface> Publisher::create_video_track()
 {
-  rtc::scoped_refptr<CapturerTrackSource> video_device = CapturerTrackSource::Create();
+  auto video_device = signal_thread_->Invoke<rtc::scoped_refptr<CapturerTrackSource>>(RTC_FROM_HERE, [this] {
+    return CapturerTrackSource::Create();
+  });
+
+//  rtc::scoped_refptr<CapturerTrackSource> video_device = CapturerTrackSource::Create();
 	rtc::scoped_refptr<webrtc::VideoTrackInterface> video_track_(factory_->CreateVideoTrack("video", video_device));
 	return video_track_;
 
