@@ -1,51 +1,40 @@
 # mediasoup broadcaster demo (libmediasoupclient v3)
-
-[libmediasoupclient][libmediasoupclient] based application that produces artificial sound and video to the specified room in [mediasoup-demo] application. The video consists of some colored rectangles moving towards the lower-right corner of the image. Credit for the artificial media creation goes to the WEBRTC team ([LICENSE](https://webrtc.googlesource.com/src/+/refs/heads/master/LICENSE)).
-
+publish stream to SRS server
 
 ## Resources
-
 * mediasoup website and documentation: [mediasoup.org](https://mediasoup.org)
 * mediasoup support forum: [mediasoup.discourse.group](https://mediasoup.discourse.group)
 
-
 ## Usage
-
 Once installed (see **Installation** below):
-
 ```bash
-SERVER_URL=https://my.mediasoup-demo.org:4443 ROOM_ID=broadcaster build/broadcaster
+SERVER_URL=http://d.ossrs.net:1985/rtc/v1/publish/ STREAM_ID=broadcaster build/broadcaster
 ```
 
 Environment variables:
 
-* `SERVER_URL`: The URL of the mediasoup-demo HTTP API server (required).
-* `ROOM_ID`: Room id (required).
-* `USE_SIMULCAST`: If "false" no simulcast will be used (defaults to "true").
-* `ENABLE_AUDIO`: If "false" no audio Producer is created (defaults to "true").
-* `WEBRTC_DEBUG`: Enable libwebrtc logging. Can be "info", "warn" or "error" (optional).
-* `VERIFY_SSL`: Verifies server side SSL certificate (defaults to "true") (optional).
+* `SERVER_URL`: The URL of the mediasoup-demo HTTP API server (default: http://d.ossrs.net:1985/rtc/v1/publish/).
+* `STREAM_ID`: Room id (default: broadcaster).
 
 ## Dependencies
 
-* [libmediasoupclient][libmediasoupclient] (already included in the repository)
+* [libmediasoupclient][libmediasoupclient] (already included in the repository, not used!)
 * [cpr][cpr] (already included in the repository)
 * OpenSSL (must be installed in the system including its headers)
 
-
 ## Installation
-
 ```bash
-git clone https://github.com/versatica/mediasoup-broadcaster-demo.git
-
-cmake . -Bbuild                                              \
-  -DLIBWEBRTC_INCLUDE_PATH:PATH=${PATH_TO_LIBWEBRTC_SOURCES} \
-  -DLIBWEBRTC_BINARY_PATH:PATH=${PATH_TO_LIBWEBRTC_BINARY}   \
-  -DOPENSSL_INCLUDE_DIR:PATH=${PATH_TO_OPENSSL_HEADERS}      \
-  -DCMAKE_USE_OPENSSL=ON
-
-make -C build
+git clone https://github.com/armersong/mediasoup-broadcaster-demo.git
 ```
+- change WEBRTC and LIBWEBRTC_BINARY_PATH in build.sh
+```bash
+./build.sh
+make -C build -j4
+```
+
+## Play
+open: [http://ossrs.net/players/rtc_player.html?vhost=d.ossrs.net&server=d.ossrs.net&port=1985&autostart=true](http://ossrs.net/players/rtc_player.html?vhost=d.ossrs.net&server=d.ossrs.net&port=1985&autostart=true)
+url: ```webrtc://d.ossrs.net/live/broadcaster```
 
 #### Linkage Considerations (1)
 

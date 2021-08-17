@@ -10,6 +10,9 @@ set(broadcaster_VERSION_MINOR 1)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(LIBWEBRTC_INCLUDE_PATH /home/armers/projects/webrtc/google/webrtc/webrtc-checkout/src)
+set(LIBWEBRTC_BINARY_PATH /home/armers/projects/webrtc/google/webrtc/webrtc-checkout/src/out/m84/obj)
+
 message("\n=========== mediasoup-broadcaster-demo Build Configuration ===========\n")
 message(STATUS "LIBWEBRTC_INCLUDE_PATH : " ${LIBWEBRTC_INCLUDE_PATH})
 message(STATUS "LIBWEBRTC_BINARY_PATH  : " ${LIBWEBRTC_BINARY_PATH})
@@ -61,14 +64,13 @@ message(STATUS "Fetching cpr...\n")
 FetchContent_Declare(
 	cpr
 	GIT_REPOSITORY https://github.com/whoshuu/cpr
-	GIT_TAG 1.4.0
+	GIT_TAG 1.6.2
 )
 FetchContent_MakeAvailable(cpr)
 
 target_sources(${PROJECT_NAME} PRIVATE
-	src/Broadcaster.cpp
 	src/main.cpp
-	src/MediaStreamTrackFactory.cpp
+	src/publisher.cpp
 )
 
 # Private (implementation) header files.

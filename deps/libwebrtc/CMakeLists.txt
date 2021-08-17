@@ -7,6 +7,8 @@ set(SOURCE_FILES
 	test/frame_generator_capturer.cc
 	test/frame_utils.cc
 	test/test_video_capturer.cc
+	test/vcm_capturer.cc
+	test/platform_video_capturer.cc
 	test/testsupport/ivf_video_frame_generator.cc
 	test/testsupport/file_utils.cc
 	test/testsupport/file_utils_override.cc
