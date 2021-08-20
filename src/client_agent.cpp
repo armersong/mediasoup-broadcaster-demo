@@ -92,7 +92,7 @@ ClientAgent::ClientAgent()
 
 ClientAgent::~ClientAgent()
 {
-  RTC_LOG(INFO) <<__FUNCTION__<<" <<<";
+  RTC_LOG(INFO) <<__FUNCTION__<<" >>>";
 	pc_->Close();
 
   RTC_LOG(INFO) <<__FUNCTION__<<" free pc_";
@@ -122,7 +122,7 @@ ClientAgent::~ClientAgent()
     delete signal_thread_;
   }
 
-  RTC_LOG(INFO) <<__FUNCTION__<<" >>>";
+  RTC_LOG(INFO) <<__FUNCTION__<<" <<<";
 }
 
 bool ClientAgent::init()
@@ -234,6 +234,41 @@ bool ClientAgent::start_stream(std::string &remote_sdp)
     pc_->CreateAnswer(this, webrtc::PeerConnectionInterface::RTCOfferAnswerOptions());
   }
 	return true;
+}
+
+bool ClientAgent::enable_stream(StreamType stype, bool enabled)
+{
+	bool ret = false;
+  std::vector<rtc::scoped_refptr<RtpReceiverInterface>> receivers = pc_->GetReceivers();
+  for (const auto& receiver : receivers) {
+    rtc::scoped_refptr<MediaStreamTrackInterface> track = receiver->track();
+    if(!track) {
+			continue;
+		}
+		if(stype == ST_Video && receiver->media_type() == cricket::MEDIA_TYPE_VIDEO) {
+      auto* video_track = static_cast<webrtc::VideoTrackInterface*>(track.get());
+			video_track->RemoveSink(this);
+			if(enabled) {
+        video_track->AddOrUpdateSink(this, rtc::VideoSinkWants());
+			}
+		} else if(stype == ST_Audio && receiver->media_type() == cricket::MEDIA_TYPE_AUDIO) {
+      auto* audio_track = static_cast<webrtc::AudioTrackInterface*>(track.get());
+			audio_track->RemoveSink(this);
+			if(enabled) {
+				audio_track->AddSink(this);
+			}
+
+		} else if(stype == ST_Data && receiver->media_type() == cricket::MEDIA_TYPE_DATA) {
+			continue;
+		} else {
+			continue;
+		}
+
+    track->set_enabled(enabled);
+    ret = true;
+		break;
+  }
+	return ret;
 }
 
 rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> ClientAgent::get_factory()

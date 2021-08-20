@@ -15,14 +15,23 @@
 
 namespace webrtc {
 
+enum StreamType {
+	ST_Video =0,
+	ST_Audio,
+	ST_Data
+};
+
 class ClientAgent : public webrtc::PeerConnectionObserver,
-                 public webrtc::CreateSessionDescriptionObserver {
+                    public webrtc::CreateSessionDescriptionObserver,
+                    public rtc::VideoSinkInterface<webrtc::VideoFrame>,
+                    public webrtc::AudioTrackSinkInterface {
 public:
 	static rtc::scoped_refptr<ClientAgent> create();
 	virtual ~ClientAgent();
 
 	virtual std::string create_offer();
   virtual bool start_stream(std::string &remote_sdp);
+  virtual bool enable_stream(StreamType stype, bool enabled);
 
 protected:
 	ClientAgent();
@@ -62,6 +71,11 @@ protected:
   // CreateSessionDescriptionObserver implementation.
   virtual void OnSuccess(webrtc::SessionDescriptionInterface* desc) override;
   virtual void OnFailure(webrtc::RTCError error) override;
+
+	//VideoSinkInterface
+  virtual void OnFrame(const webrtc::VideoFrame& frame) override {}
+  //AudioTrackSinkInterface
+  virtual void OnData(const void* audio_data, int bits_per_sample, int sample_rate, size_t number_of_channels, size_t number_of_frames) override {}
 
 private:
   rtc::scoped_refptr<webrtc::PeerConnectionInterface> pc_;

@@ -5,9 +5,7 @@
 
 namespace webrtc {
 
-class Player: public ClientAgent,
-               public rtc::VideoSinkInterface<webrtc::VideoFrame>,
-               public webrtc::AudioTrackSinkInterface {
+class Player: public ClientAgent {
 public:
   static rtc::scoped_refptr<Player> create();
   virtual ~Player();

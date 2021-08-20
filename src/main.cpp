@@ -114,12 +114,19 @@ void start_player(std::string &server_url, std::string &stream_id)
 
     std::cout << "[INFO] press Ctrl+C or Cmd+C to leave..." << std::endl;
 
+#if 0
+    rtc::Thread::SleepMs(20000);
+		std::cout<<"disable video"<<std::endl;
+		client->enable_stream(ST_Video, false);
+		rtc::Thread::SleepMs(20000);
+#else
     while (true){
       int c = std::cin.get();
       if( c == 'q') {
         break;
       }
     }
+#endif
   } while(false);
 }
 

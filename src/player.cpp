@@ -18,10 +18,17 @@
 
 namespace webrtc {
 
+class AudioDecoderFactoryForPlayer{
+public:
+	static rtc::scoped_refptr<AudioDecoderFactory> create() {
+    return webrtc::CreateBuiltinAudioDecoderFactory();
+	}
+};
+
 class H264VideoBuffer : public webrtc::VideoFrameBuffer {
 public:
   H264VideoBuffer(const uint8_t *data, int len)
-	: width_(640), height_(480){
+	: width_(640), height_(480), data_len_(len){
     data_ = new uint8_t[len];
 		memcpy(data_, data, len);
 	}
@@ -35,6 +42,7 @@ protected:
 
 public:
 	virtual uint8_t* data() const { return data_; }
+	virtual int size() const { return data_len_; }
 
 public:
 	//inherit VideoFrameBuffer
@@ -68,11 +76,13 @@ public:
 
 private:
   uint8_t * data_;
+	int data_len_;
 	int width_;
 	int height_;
 };
 
 class DummyVideoDecoder : public webrtc::VideoDecoder {
+
 public:
   DummyVideoDecoder() : callback_(nullptr) {
 
@@ -96,7 +106,7 @@ public:
         .set_timestamp_rtp(input_image.Timestamp())
         .set_color_space(input_image.ColorSpace());
       VideoFrame decoded_image = builder.build();
-			int qp = 20;  //@TODO
+			int qp = 25;  //@TODO
       callback_->Decoded(decoded_image, absl::nullopt, qp);
 		}
     return WEBRTC_VIDEO_CODEC_OK;
@@ -116,18 +126,8 @@ private:
   webrtc::DecodedImageCallback* callback_;
 };
 
-static bool IsFormatSupported(
-  const std::vector<webrtc::SdpVideoFormat>& supported_formats,
-  const webrtc::SdpVideoFormat& format) {
-  for (const webrtc::SdpVideoFormat& supported_format : supported_formats) {
-    if (cricket::IsSameCodec(format.name, format.parameters,supported_format.name,supported_format.parameters)) {
-      return true;
-    }
-  }
-  return false;
-}
+class VideoDecoderFactoryForPlayer : public VideoDecoderFactory {
 
-class RTC_EXPORT VideoDecoderFactoryForPlayer : public VideoDecoderFactory {
 public:
   std::vector<SdpVideoFormat> GetSupportedFormats() const override {
     std::vector<SdpVideoFormat> formats;
@@ -136,10 +136,9 @@ public:
       formats.push_back(format);
     for (const SdpVideoFormat& h264_format : SupportedH264Codecs())
       formats.push_back(h264_format);
-//    if (kIsLibaomAv1DecoderSupported)
-//      formats.push_back(SdpVideoFormat(cricket::kAv1CodecName));
     return formats;
 	}
+
   std::unique_ptr<VideoDecoder> CreateVideoDecoder(const SdpVideoFormat& format) override {
     if (!IsFormatSupported(GetSupportedFormats(), format)) {
       RTC_LOG(LS_ERROR) << "Trying to create decoder for unsupported format";
@@ -162,10 +161,22 @@ public:
   static std::unique_ptr<VideoDecoderFactory> create() {
     return std::make_unique<VideoDecoderFactoryForPlayer>();
 	}
+
 protected:
   std::unique_ptr<VideoDecoder> create_h264_decoder() {
     return std::make_unique<DummyVideoDecoder>();
 	}
+
+  static bool IsFormatSupported(
+    const std::vector<webrtc::SdpVideoFormat>& supported_formats,
+    const webrtc::SdpVideoFormat& format) {
+    for (const webrtc::SdpVideoFormat& supported_format : supported_formats) {
+      if (cricket::IsSameCodec(format.name, format.parameters,supported_format.name,supported_format.parameters)) {
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 rtc::scoped_refptr<Player> Player::create()
@@ -226,7 +237,7 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Player::create_factor
     signal_thread(),
     nullptr,
     webrtc::CreateBuiltinAudioEncoderFactory(),
-    webrtc::CreateBuiltinAudioDecoderFactory(),
+    AudioDecoderFactoryForPlayer::create(),
     webrtc::CreateBuiltinVideoEncoderFactory(),
     VideoDecoderFactoryForPlayer::create(),
     nullptr /*audio_mixer*/,
@@ -271,6 +282,19 @@ void Player::OnFrame(const webrtc::VideoFrame& video_frame)
 	if(buffer->type() == VideoFrameBuffer::Type::kNative) {
     H264VideoBuffer *vb = static_cast<H264VideoBuffer*>(buffer.get());
 		const uint8_t* data = vb->data();
+#if 0
+		static FILE *f = nullptr;
+		if(!f) {
+			f = fopen("/tmp/a.h264", "wb");
+		}
+    if(f && video_frames_ < 25 * 100 ) {
+      RTC_LOG(INFO) <<__FUNCTION__<<" type "<<buffer->type()<<" frame size "<<video_frame.size()<<" buffer size "<<vb->size()<<" frames "<<video_frames_;
+      fwrite(data, 1, vb->size(), f);
+    }
+#endif
+	}
+	if(video_frames_ % 25*1 == 0) {
+    RTC_LOG(INFO) <<__FUNCTION__<<" type "<<buffer->type()<<" width "<<video_frame.width()<<" height "<<video_frame.height();
 	}
   video_frames_++;
 }
@@ -278,8 +302,10 @@ void Player::OnFrame(const webrtc::VideoFrame& video_frame)
 void Player::OnData(const void* audio_data, int bits_per_sample, int sample_rate,
                          size_t number_of_channels, size_t number_of_frames) {
 //  RTC_LOG(INFO) <<__FUNCTION__;
+  if(audio_frames_ % 50*1 == 0) {
+    RTC_LOG(INFO) <<__FUNCTION__<<" bits "<<bits_per_sample<<" sample rate "<<sample_rate<<" channels "<<number_of_channels<<" number of frames "<<number_of_frames;
+	}
   audio_frames_++;
 }
-
 
 }
