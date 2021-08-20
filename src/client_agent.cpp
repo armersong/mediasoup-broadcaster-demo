@@ -1,4 +1,6 @@
-#include "publisher.h"
+#include "client_agent.h"
+
+#include <set>
 
 #include "absl/memory/memory.h"
 #include "api/audio_codecs/audio_decoder_factory.h"
@@ -72,22 +74,23 @@ private:
   std::unique_ptr<webrtc::test::VcmCapturer> capturer_;
 };
 
-rtc::scoped_refptr<Publisher> Publisher::create()
+
+rtc::scoped_refptr<ClientAgent> ClientAgent::create()
 {
-  rtc::scoped_refptr<Publisher> pub(new rtc::RefCountedObject<Publisher>());
-	if(!pub->init()) {
-		pub = rtc::scoped_refptr<Publisher>();
+  rtc::scoped_refptr<ClientAgent> agent(new rtc::RefCountedObject<ClientAgent>());
+	if(!agent->init()) {
+		agent = rtc::scoped_refptr<ClientAgent>();
 	}
-	return pub;
+	return agent;
 }
 
-Publisher::Publisher()
-:pc_(nullptr), signal_thread_(nullptr)
+ClientAgent::ClientAgent()
+:pc_(nullptr), signal_thread_(nullptr), srflx_count_(0)
 {
   RTC_LOG(INFO) <<__FUNCTION__;
 }
 
-Publisher::~Publisher()
+ClientAgent::~ClientAgent()
 {
   RTC_LOG(INFO) <<__FUNCTION__<<" <<<";
 	pc_->Close();
@@ -122,7 +125,7 @@ Publisher::~Publisher()
   RTC_LOG(INFO) <<__FUNCTION__<<" >>>";
 }
 
-bool Publisher::init()
+bool ClientAgent::init()
 {
   RTC_LOG(INFO) <<__FUNCTION__;
 	if(!factory_.get()) {
@@ -143,7 +146,7 @@ bool Publisher::init()
 	return true;
 }
 
-std::string Publisher::create_offer()
+std::string ClientAgent::create_offer()
 {
   RTC_LOG(INFO) <<__FUNCTION__;
 	auto audio_track = create_audio_track();
@@ -161,7 +164,7 @@ std::string Publisher::create_offer()
 	return merge_ice(sdp);
 }
 
-std::string Publisher::merge_ice(std::string &sdp)
+std::string ClientAgent::merge_ice(std::string &sdp)
 {
 	std::string res = "";
 	std::string::size_type pos = sdp.find("m=audio");
@@ -183,11 +186,36 @@ std::string Publisher::merge_ice(std::string &sdp)
 			}
 		}
 	}
-	return "";
+	return res;
 }
 
+int ClientAgent::get_local_tracks()
+{
+	std::set<std::string> track_ids;
+	auto sends = pc_->GetSenders();
+  std::vector<rtc::scoped_refptr<RtpSenderInterface>>::iterator sit = sends.begin();
+	for(; sit != sends.end(); sit++) {
+    rtc::scoped_refptr<RtpSenderInterface> i = *sit;
+    MediaStreamTrackInterface *track = i->track().release();
+		if(track) {
+      track_ids.insert(track->kind());
+		}
+	}
 
-bool Publisher::start_stream(std::string &remote_sdp)
+  auto recvs = pc_->GetReceivers();
+  std::vector<rtc::scoped_refptr<RtpReceiverInterface>>::iterator rit = recvs.begin();
+  for(; rit != recvs.end(); rit++) {
+    rtc::scoped_refptr<RtpReceiverInterface> i = *rit;
+    MediaStreamTrackInterface *track = i->track().release();
+    if(track) {
+      track_ids.insert(track->kind());
+    }
+  }
+
+	return track_ids.size();
+}
+
+bool ClientAgent::start_stream(std::string &remote_sdp)
 {
   webrtc::SdpType type = webrtc::SdpType::kAnswer;
   webrtc::SdpParseError error;
@@ -208,7 +236,7 @@ bool Publisher::start_stream(std::string &remote_sdp)
 	return true;
 }
 
-rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Publisher::get_factory()
+rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> ClientAgent::get_factory()
 {
 	if(!signal_thread_) {
     signal_thread_   = rtc::Thread::Create().release();
@@ -217,6 +245,11 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Publisher::get_factor
       RTC_LOG(INFO) <<__FUNCTION__<<" thread start errored";
     }
 	}
+	return create_factory();
+}
+
+rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> ClientAgent::create_factory()
+{
   webrtc::PeerConnectionInterface::RTCConfiguration config;
 
   auto fakeAudioCaptureModule = FakeAudioCaptureModule::Create();
@@ -226,7 +259,7 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Publisher::get_factor
   }
 
   rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> factory = webrtc::CreatePeerConnectionFactory(
-	  nullptr,
+    nullptr,
     nullptr,
     signal_thread_,
     fakeAudioCaptureModule,
@@ -240,10 +273,10 @@ rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface> Publisher::get_factor
   if (!factory){
     RTC_LOG(INFO) <<__FUNCTION__<<" error ocurred creating peerconnection factory";
   }
-	return factory;
+  return factory;
 }
 
-rtc::scoped_refptr<webrtc::AudioTrackInterface> Publisher::create_audio_track()
+rtc::scoped_refptr<webrtc::AudioTrackInterface> ClientAgent::create_audio_track()
 {
   rtc::scoped_refptr<webrtc::AudioTrackInterface> audio_track(
     factory_->CreateAudioTrack("audio",factory_->CreateAudioSource(
@@ -256,7 +289,7 @@ rtc::scoped_refptr<webrtc::AudioTrackInterface> Publisher::create_audio_track()
 //  return factory_->CreateAudioTrack("audio", source);
 }
 
-rtc::scoped_refptr<webrtc::VideoTrackInterface> Publisher::create_video_track()
+rtc::scoped_refptr<webrtc::VideoTrackInterface> ClientAgent::create_video_track()
 {
   auto video_device = signal_thread_->Invoke<rtc::scoped_refptr<CapturerTrackSource>>(RTC_FROM_HERE, [this] {
     return CapturerTrackSource::Create();
@@ -272,33 +305,38 @@ rtc::scoped_refptr<webrtc::VideoTrackInterface> Publisher::create_video_track()
 //  return factory_->CreateVideoTrack("video", videoTrackSource);
 }
 
-void Publisher::OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState new_state)
+void ClientAgent::OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState new_state)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
 
-void Publisher::OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
+void ClientAgent::OnAddTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver,
                 const std::vector<rtc::scoped_refptr<webrtc::MediaStreamInterface>>& streams)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
-void Publisher::OnRemoveTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
+
+void ClientAgent::OnRemoveTrack(rtc::scoped_refptr<webrtc::RtpReceiverInterface> receiver)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
-void Publisher::OnDataChannel(rtc::scoped_refptr<webrtc::DataChannelInterface> channel)
+
+void ClientAgent::OnDataChannel(rtc::scoped_refptr<webrtc::DataChannelInterface> channel)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
-void Publisher::OnRenegotiationNeeded()
+
+void ClientAgent::OnRenegotiationNeeded()
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
-void Publisher::OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state)
+
+void ClientAgent::OnIceConnectionChange(webrtc::PeerConnectionInterface::IceConnectionState new_state)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
-void Publisher::OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState new_state)
+
+void ClientAgent::OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheringState new_state)
 {
   RTC_LOG(INFO) <<__FUNCTION__<<" new_state "<<new_state;
   if(new_state == PeerConnectionInterface::kIceGatheringNew) {
@@ -311,7 +349,7 @@ void Publisher::OnIceGatheringChange(webrtc::PeerConnectionInterface::IceGatheri
   }
 }
 
-void Publisher::OnIceCandidate(const webrtc::IceCandidateInterface* candidate)
+void ClientAgent::OnIceCandidate(const webrtc::IceCandidateInterface* candidate)
 {
   std::string candidateStr;
   candidate->ToString(&candidateStr);
@@ -327,19 +365,19 @@ void Publisher::OnIceCandidate(const webrtc::IceCandidateInterface* candidate)
 		srflx_count_ ++;
     RTC_LOG(INFO) <<__FUNCTION__<<" stun address "<<srflx_count_;
 	}
-	if(srflx_count_ >=2) {
+	if(srflx_count_ >= get_local_tracks()) {
     ice_promise_.set_value(true);
 		srflx_count_ = -1;
 	}
 }
 
-void Publisher::OnIceConnectionReceivingChange(bool receiving)
+void ClientAgent::OnIceConnectionReceivingChange(bool receiving)
 {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
 
 // CreateSessionDescriptionObserver implementation.
-void Publisher::OnSuccess(webrtc::SessionDescriptionInterface* desc)
+void ClientAgent::OnSuccess(webrtc::SessionDescriptionInterface* desc)
 {
   pc_->SetLocalDescription(DummySetSessionDescriptionObserver::Create(), desc);
   std::string sdp;
@@ -347,17 +385,9 @@ void Publisher::OnSuccess(webrtc::SessionDescriptionInterface* desc)
   sdp_promise_.set_value(sdp);
 }
 
-void Publisher::OnFailure(webrtc::RTCError error)
+void ClientAgent::OnFailure(webrtc::RTCError error)
 {
-
-}
-
-void Publisher::OnData(const void* audio_data,
-                    int bits_per_sample,
-                    int sample_rate,
-                    size_t number_of_channels,
-                    size_t number_of_frames) {
-
+  RTC_LOG(INFO) <<__FUNCTION__;
 }
 
 }

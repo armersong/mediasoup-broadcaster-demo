@@ -70,7 +70,9 @@ FetchContent_MakeAvailable(cpr)
 
 target_sources(${PROJECT_NAME} PRIVATE
 	src/main.cpp
+	src/client_agent.cpp
 	src/publisher.cpp
+	src/player.cpp
 )
 
 # Private (implementation) header files.
